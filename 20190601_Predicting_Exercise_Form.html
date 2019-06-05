@@ -219,9 +219,9 @@ file.info(pmlTestFile)$size </code></pre>
 <pre><code>## [1] 15134</code></pre>
 <p>Here’s reading the data files into R. I’ve renamed the ‘test’ file to ‘pmlProject’ for clarity. You can see that I include a little code around the call to read.csv just so that I can see how long the load took.</p>
 <pre class="r"><code>a &lt;- Sys.time(); pmlTrain &lt;- read.csv(file = pmlTrainFile, as.is = TRUE); b &lt;- Sys.time(); print(paste(&quot;Reading the file from&quot;, a, &quot;to&quot;, b, &quot;.&quot;)) </code></pre>
-<pre><code>## [1] &quot;Reading the file from 2019-06-05 13:11:39 to 2019-06-05 13:11:41 .&quot;</code></pre>
+<pre><code>## [1] &quot;Reading the file from 2019-06-05 13:24:12 to 2019-06-05 13:24:13 .&quot;</code></pre>
 <pre class="r"><code>a &lt;- Sys.time(); pmlProject &lt;- read.csv(file = pmlTestFile, as.is = TRUE); b &lt;- Sys.time(); print(paste(&quot;Reading the file from&quot;, a, &quot;to&quot;, b, &quot;.&quot;)) </code></pre>
-<pre><code>## [1] &quot;Reading the file from 2019-06-05 13:11:41 to 2019-06-05 13:11:41 .&quot;</code></pre>
+<pre><code>## [1] &quot;Reading the file from 2019-06-05 13:24:13 to 2019-06-05 13:24:13 .&quot;</code></pre>
 <p>Reading the training file takes between 1 and 3 seconds. Reading the project file takes less than a second.</p>
 <p>And here’s how much data we’ve got.</p>
 <pre class="r"><code>dim(pmlTrain)</code></pre>
@@ -369,7 +369,12 @@ registerDoSEQ()</code></pre>
 <pre><code>##  [1] B A B A A E D B A A B C B A E E A B B B
 ## Levels: A B C D E</code></pre>
 <p>There are other classification methods that could potentially be useful. Linear Discriminant Analysis and Support Vector Machines are a couple. However, given the accuracy of this model (OOB error estimate of 0.001427) I am disinclined to pursue any other classification methods.</p>
-<p>Note also that it may be possible to reduce overall processing time. * Principal Component Analysis could further decrease the number of features * Using cross-validation instead of bootstrapping could reduce the amount of calculation that goes into training the model * The algorithm may not need to produce the default 500 trees in order to get an appropriate accuracy estimate</p>
+<p>Note also that it may be possible to reduce overall processing time</p>
+<ul>
+<li>Principal Component Analysis could further decrease the number of features</li>
+<li>Using cross-validation instead of bootstrapping could reduce the amount of calculation that goes into training the model</li>
+<li>The algorithm may not need to produce the default 500 trees in order to get an appropriate accuracy estimate</li>
+</ul>
 </div>
 </div>
 <div id="conclusion" class="section level2">

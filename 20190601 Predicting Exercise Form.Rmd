@@ -209,9 +209,10 @@ predict(pmlRF3, pmlProject2)
 
 There are other classification methods that could potentially be useful. Linear Discriminant Analysis and Support Vector Machines are a couple. However, given the accuracy of this model (OOB error estimate of `r pmlRF3$finalModel[4]$err.rate[500,1]`) I am disinclined to pursue any other classification methods.
 
-Note also that it may be possible to reduce overall processing time.
-* Principal Component Analysis could further decrease the number of features 
-* Using cross-validation instead of bootstrapping could reduce the amount of calculation that goes into training the model 
+Note also that it may be possible to reduce overall processing time
+
+* Principal Component Analysis could further decrease the number of features
+* Using cross-validation instead of bootstrapping could reduce the amount of calculation that goes into training the model
 * The algorithm may not need to produce the default 500 trees in order to get an appropriate accuracy estimate
 
 ##Conclusion
