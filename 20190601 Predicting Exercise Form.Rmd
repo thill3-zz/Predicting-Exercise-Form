@@ -1,0 +1,218 @@
+---
+title: "Predicting Exercise Form"
+author: "Thomas Hill III"
+date: "June 5, 2019"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "G:/My Drive/Coursera Data Science Specialization/Practical Machine Learning/Fitness Data")
+```
+##Executive Summary
+In general, in the past it has been common to track how much of an exercise someone is doing. This data collection has not, however, addressed whether an exercise is done correctly. The dataset in this paper was collected from accelerometers on the belt, forearm, arm, and dumbell of 6 participants (males aged 20-28), and it relates specifically to how an exercise is performed. What kind of action the participant took (either correct or one of 4 incorrect ways) is categorized as one of 5 letters. 'A' corresponds to performing the dumbbell curl correctly. 'B', 'C', 'D', and 'E' are all variations that perform the exercise incorrectly. The ultimate goal is to use the data to determine in which manner the exercise is performed.  
+Usefully the random forest model in the caret package in R provides an oob (out-of-bag or out-of-sample) error estimate while predicting the "classe" variable on the dataset. We see that the random forest produces a model with over 99.8% prediction accuracy on an separate data sample (this is estimated out-of-sample error). This lends confidence to its predictions on the assigned testing set that has no given "classe" values
+
+##Analysis
+###Load Data
+* Training file is located at https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+* Testing file is located at https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+* Dataset citation: Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. Wearable Computing: Accelerometers' Data Classification of Body Postures and Movements. Proceedings of 21st Brazilian Symposium on Artificial Intelligence. Advances in Artificial Intelligence - SBIA 2012. In: Lecture Notes in Computer Science. , pp. 52-61. Curitiba, PR: Springer Berlin / Heidelberg, 2012. ISBN 978-3-642-34458-9. DOI: 10.1007/978-3-642-34459-6_6. 
+
+```{r Load data, include = "false", eval = FALSE}
+if(!dir.exists("G:/My Drive/Coursera Data Science Specialization/Practical Machine Learning/Fitness Data")) {
+        setwd("G:/My Drive/Coursera Data Science Specialization/Practical Machine Learning")
+        dir.create(path = "G:/My Drive/Coursera Data Science Specialization/Practical Machine Learning/Fitness Data")
+}
+if(!file.exists("pml-training.csv")) {
+        fileURL <-
+                "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+        download.file(url = fileURL
+                      , destfile = "pml-training.csv"
+                      , mode = "w"
+        )
+} else {
+        #print("pml-training.csv is already available")
+        
+}
+if(!file.exists("pml-testing.csv")) {
+        fileURL <-
+                "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+        download.file(url = fileURL
+                      , destfile = "pml-testing.csv"
+                      , mode = "w"
+        )
+} else {
+        #print("pml-testing.csv is already available")
+        
+}
+```
+Here we can see the size (in bytes) of the files.
+```{r Size of Files}
+pmlTrainFile <- "pml-training.csv"
+file.info(pmlTrainFile)$size 
+pmlTestFile <- "pml-testing.csv"
+file.info(pmlTestFile)$size 
+```
+
+Here's reading the data files into R. I've renamed the 'test' file to 'pmlProject' for clarity. You can see that I include a little code around the call to read.csv just so that I can see how long the load took.
+```{r read Train and Project files, reslts = "hide"}
+a <- Sys.time(); pmlTrain <- read.csv(file = pmlTrainFile, as.is = TRUE); b <- Sys.time(); print(paste("Reading the file from", a, "to", b, ".")) 
+a <- Sys.time(); pmlProject <- read.csv(file = pmlTestFile, as.is = TRUE); b <- Sys.time(); print(paste("Reading the file from", a, "to", b, ".")) 
+```
+Reading the training file takes between 1 and 3 seconds. Reading the project file takes less than a second.
+
+And here's how much data we've got.
+``` {r Dimensions of Train and Project}
+dim(pmlTrain)
+dim(pmlProject)
+```
+So there are `r dim(pmlTrain)[1]` rows in the training data set and `r dim(pmlProject)[1]` rows in the set to predict. That `r dim(pmlTrain)[2]` features is a lot, though. It would be good to try to reduce that.
+
+###Clean dataset
+```{r Load caret, results = "hide", message = FALSE}
+library(caret)
+```
+The first thing to do is check whether any of the features (variables) has zero or nearly zero variance. If they do then we should exclude them from the model because they will not be able to assist much in the prediction.
+```{r Near Zero Variance Check, results = "hide"}
+nzvDF <- nearZeroVar(pmlTrain, saveMetrics = TRUE)
+```
+A "true" in the third column indicates that the variable has zero variance. That means every value is the same.
+```{r Zero Variance}
+table(nzvDF[,3])
+```
+Every value is FALSE. There are no variables with zero variance.
+A "true" in the fourth column indicates that the variable has near zero (very little) variance.
+```{r Variance close to zero}
+table(nzvDF[,4])
+```
+60 variables are in this list. We'll remove them from the dataset.
+```{r remove nzv columns}
+nzvDontUse <- nearZeroVar(pmlTrain, saveMetrics = FALSE)
+pmlTrain1 <- pmlTrain[,-nzvDontUse]
+pmlProject1 <- pmlProject[,-nzvDontUse]
+dim(pmlTrain1)
+dim(pmlProject1)
+```
+By doing this there are `r dim(pmlTrain)[2] - dim(pmlTrain1)[2]` fewer variables (columns) in the dataset. Unfortunately `r dim(pmlTrain1)[2]` is still a lot.
+
+The "num_window" variable isn't explicitly a measurement, so it's worth investigating a bit.
+``` {r Look at num_window}
+table(pmlTrain$new_window, pmlTrain$classe)
+```
+"Yes" and "no" appear distributed amoung the classe variables in a similar way as the class variables are distributed. We won't eliminate it from consideration.
+
+Are there any more variables worth eliminating? Perhaps there a some with a large portion of NAs in their values.
+```{r Mostly NAs}
+fracNAs <- apply(pmlTrain1, MARGIN = 2, function(x) {mean(is.na(x))})
+table(fracNAs)
+```
+That says that `r table(fracNAs)[2]` features are 97.93% NAs. We should remove those features from the dataset. Note that in the following transformation I also remove the first five columns of the dataset. These are an index and some timestamps that are not relevant to the analysis.
+```{r Remove mostly NAs}
+mostlyNAs <- which(fracNAs > .5)
+mostlyNAs
+pmlTrain2 <- (pmlTrain1[,-mostlyNAs])[,-c(1:5)]
+```
+And now our dataset has these dimensions.
+```{r dimensions to analyize}
+dim(pmlTrain2)
+```
+That means we've eliminated `r dim(pmlTrain)[2]-dim(pmlTrain2)[2]` unusable features from the original dataset.
+
+Let's check that there are no more features that are mostly NAs.
+```{r How many mostly NA columns left}
+fracNAs1 <- apply(pmlTrain2, MARGIN = 2, function(x) {mean(is.na(x))})
+table(fracNAs1)
+```
+None left. That's good.
+
+We have to make sure that the data we'll predict from is transformed in the same way as the data we used to train the model.
+```{r Transform Project data}
+pmlProject2 <- (pmlProject1[,-mostlyNAs])[,-c(1:5)]
+dim(pmlProject2)
+```
+Check that there aren't any columns in this dataset that are mostly NAs.
+```{r Does Project data have any features with mostly NAs}
+fracNAsProj <- apply(pmlProject2, MARGIN = 2, function(x) {mean(is.na(x))})
+table(fracNAsProj)
+```
+#####Split the data into training data and testing data.
+Normally we'd split the data into a training set and a test set. In this case it's unnecessary because the random forest model computes an out-of-bag (oob or out-of-sample) error for us during the training (creation) of the model. 
+
+###Use parallel processing to reduce computation time
+In order to perform the model fitting in a reasonable amount of time it is necessary to make use of the parallel processing capabilities of the computer's processor.  
+Note that in the `r print('makeCluster')` statement it is convention to leave one core free for the operating system to perform its functions.
+```{r Parallel processing setup, message = FALSE}
+library(parallel)
+library(doParallel)
+cluster <- makeCluster(detectCores() - 1)
+registerDoParallel(cluster)
+```
+
+Because there are plenty of rows it is the case that regular k-fold cross-validation may work for training the model. FOr the sake of completeness I'll allow the training algorithm to use the default booststrap method.
+```{r Set up trainControl}
+pmlRFControl <- trainControl(allowParallel = TRUE)
+```
+
+
+```{r Train the RF model, eval = FALSE}
+a <- Sys.time(); pmlRF3 <- train(classe ~.,method="rf",data=pmlTrain2, trControl = pmlRFControl); b <- Sys.time(); print(paste("Training Random Forest model", a, "to", b, ".")) 
+```
+This takes 68 minutes using standard bootstrapping on 7 processing threads.
+
+Now we have to close the parallel processing.
+```{r Close Parallel Processing}
+stopCluster(cluster)
+registerDoSEQ()
+```
+And because it took that long we'll save the model to a file and then load it again. That saves the processing time in the future.
+```{r Save RF model, eval = FALSE}
+save(pmlRF3, file = "Practical Machine Learning Random Forest Algorithm.rda")
+```
+```{r Load RF model, eval = TRUE}
+load(file = "Practical Machine Learning Random Forest Algorithm.rda")
+```
+
+###Model Analysis
+Remember, the caret::train function's random forest model contains detail about the prediciton error
+```{r final RF model}
+(pmlRF3$finalModel)$confusion
+```
+and the out-of-bag error estimate.
+```{r OOb error}
+(pmlRF3$finalModel)$err.rate[500,1]
+```
+So we can see that the class prediction error is less than $3.5 \times 10^-3$ for each class and that the estimated oob error is `r (pmlRF3$finalModel)$err.rate[500,1]` or approximately $1.4 \times 10^-3$.
+
+The random forest uses a subset of the predictors for each tree. In this plot we can see how many features it used.
+```{r Accuracy by Predictor Count Plot, echo = FALSE, fig.height = 3.5}
+plot(pmlRF3, main = 'Accuracy by Feature Count')
+```
+
+The plot confirms that R got the best forest when it used 27 features of the 53 available
+
+We can also see what R thinks about the most important variables in the model.
+
+```{r varImpPlot, echo = FALSE, message = FALSE, fig.height = 6}
+library(randomForest)
+varImpPlot(pmlRF3$finalModel, main = 'Variable Importance Plot: Random Forest')
+```
+
+It would appear the most effective predictor was num_window. This was followed by roll_belt, pitch_forearm, yaw_belt, magnet_dumbbell_z, pitch_belt, magnet_dumbell_y, and roll_forearm. The rest had progressively less effect on the Gini value (a measure of prediction accuracy).
+
+And finally we can predict the classes for the 'Project' dataset.
+```{r predict for project}
+predict(pmlRF3, pmlProject2)
+```
+
+There are other classification methods that could potentially be useful. Linear Discriminant Analysis and Support Vector Machines are a couple. However, given the accuracy of this model (OOB error estimate of `r pmlRF3$finalModel[4]$err.rate[500,1]`) I am disinclined to pursue any other classification methods.
+
+Note also that it may be possible to reduce overall processing time.
+* Principal Component Analysis could further decrease the number of features 
+* Using cross-validation instead of bootstrapping could reduce the amount of calculation that goes into training the model 
+* The algorithm may not need to produce the default 500 trees in order to get an appropriate accuracy estimate
+
+##Conclusion
+It appears to be possible to determine accurately the appropriateness of the form of an exercise (at least this exercise) using sensors on various parts of the body. A random forest model predicts very well and estimates its own error (on an unseen dataset) as approximately `r pmlRF3$finalModel[4]$err.rate[500,1]` or about `r pmlRF3$finalModel[4]$err.rate[500,1]*100` %. On the given testing data the predictions are `r predict(pmlRF3, pmlProject2)`
